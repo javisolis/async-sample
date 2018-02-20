@@ -11,59 +11,42 @@ function resolveAfterSeconds(seconds) {
         setTimeout(() => {
             p('resolved');
         }, seconds * 1000);
-    });
+    }, () => { throw new Error('exception!'); });
 }
 
 function generateRandomNumber() {
-    return new Promise(p => {
+    return new Promise(function (resolve, reject) {
         var randomNumberBetween0and10 = Math.floor(Math.random() * 10);
-        return p(randomNumberBetween0and10);
+        return resolve(randomNumberBetween0and10);
     });
 }
 
 async function asyncCall(caller, next) {
     console.log(caller + ' => calling');
-    var randomNumber = await generateRandomNumber();
-    var result = await resolveAfterSeconds(randomNumber);
-    console.log(caller + ' => ' + result + ' after ' + randomNumber + ' seconds');
-    return next('task finished');
+    generateRandomNumber().then(function (randomNumber) {
+        resolveAfterSeconds(randomNumber).then(function (result) {
+            console.log(caller + ' => ' + result + ' after ' + randomNumber + ' seconds');
+            next(null, 'task finished');
+        });
+    }).catch(error => next(error.message, null));
 }
 
+let retryOptions = { times: 10, interval: 200 };
+const maxItemsInParallel = 9;
 var startDate = new Date();
-async.parallel([
-    function (callback) {
-        asyncCall(1, function () {
-            callback();
+
+let parallelTasks = [];
+for (let i = 0; i < maxItemsInParallel; i++) {
+    parallelTasks.push(function (callback) {
+        asyncCall(i, function (err, result) {
+            callback(err, result);
         })
-    },
-    function (callback) {
-        asyncCall(2, function () {
-            callback();
-        })
-    },
-    function (callback) {
-        asyncCall(3, function () {
-            callback();
-        })
-    },
-    function (callback) {
-        asyncCall(4, function () {
-            callback();
-        })
-    },
-    function (callback) {
-        asyncCall(5, function () {
-            callback();
-        })
-    },
-    function (callback) {
-        asyncCall(6, function () {
-            callback();
-        })
-    },
-], function (error, results) {
-    calcElapsedMilliseconds(startDate, function(elapsedTime) {
+    });
+}
+async.parallel(parallelTasks, function (err, result) {
+    calcElapsedMilliseconds(startDate, function (elapsedTime) {
         console.log('Elapsed ' + elapsedTime + ' milliseconds');
     });
 });
+
 
